@@ -95,7 +95,7 @@ else
     echo "Done! The package ${out_pkg} has been configured for your use."
     
     echo "Installing Duo..."
-    installer -pkg ${out_pkg} -target /
+    installer -pkg ${out_pkg} -target /Library/Security/SecurityAgentPlugins
     echo "Cleaning up..."
     rm -rf /tmp/MacLogon-latest
     rm -rf /tmp/MacLogon-latest.zip

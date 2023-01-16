@@ -57,7 +57,7 @@ if ! [ -z $uninstall ]; then
     [ -d "/tmp/MacLogon-latest" ] && rm -rf /tmp/MacLogon-latest
     unzip -q /tmp/MacLogon-latest.zip -d /tmp/MacLogon-latest
     pkg_path=$( find /tmp/MacLogon-latest/MacLogon-* -name 'MacLogon-Uninstaller-*.pkg' )
-    installer -pkg ${pkg_path} -target /
+    installer -pkg ${pkg_path}
     echo "Cleaning up..."
     rm -rf /tmp/MacLogon-latest
     rm -rf /tmp/MacLogon-latest.zip
@@ -129,7 +129,7 @@ else
     echo "Done! The package ${out_pkg} has been configured for your use."
     
     echo "Installing Duo..."
-    installer -pkg ${out_pkg} -target /Library/Security/SecurityAgentPlugins
+    installer -allowUntrusted -verboseR -pkg ${out_pkg}
     echo "Cleaning up..."
     rm -rf /tmp/MacLogon-latest
     rm -rf /tmp/MacLogon-latest.zip

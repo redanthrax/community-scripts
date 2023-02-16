@@ -116,9 +116,13 @@ function Win_DuoAuthLogon_Manage {
     )
 
     Begin {
-        if ($null -ne (Get-WmiObject -Class Win32_Product | Where-Object { $_.Name -Match "Duo Authentication" }) -and -Not($Uninstall)) {
-            Write-Output "Duo Authentication already installed."
-            Exit 0
+        $latest = "4.2.1"
+        $duo = Get-WmiObject -Class Win32_Product | Where-Object { $_.Name -Match "Duo Authentication" }
+        if ($null -ne $duo -and -Not($Uninstall)) {
+            if ($duo.Version.Contains($latest)) { 
+                Write-Output "Duo Authentication already installed and up-to-date."
+                Exit 0
+            }
         }
 
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
@@ -161,18 +165,15 @@ function Win_DuoAuthLogon_Manage {
             if ($timedOut) {
                 $process | kill
                 Write-Output "Install timed out after 300 seconds."
-                Exit 1
             }
             elseif ($process.ExitCode -ne 0) {
                 $code = $process.ExitCode
                 Write-Output "Install error code: $code."
-                Exit 1
             }
         }
         Catch {
             $exception = $_.Exception
             Write-Output "Error: $exception"
-            Exit 1
         }
     }
 
@@ -181,7 +182,12 @@ function Win_DuoAuthLogon_Manage {
             Remove-Item -Path "C:\packages$random" -Recurse -Force
         }
 
+        if ($error) {
+            Exit 1
+        }
+
         Write-Output "Installation complete."
+
         Exit 0
     }
 }

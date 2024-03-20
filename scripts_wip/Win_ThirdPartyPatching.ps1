@@ -19,6 +19,8 @@ function Win_ThirdPartyPatching {
     )
 
     Begin {
+        $error.Clear()
+        Write-Output "Setting up prereqs"
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
         #get winget from build
         $wingetDir = "C:\Program Files\winget"
@@ -28,29 +30,46 @@ function Win_ThirdPartyPatching {
         }
 
         if (-Not(Test-Path -PathType Leaf -Path "$wingetDir\winget.exe")) {
+            Write-Output "Downloading winget binary"
             Invoke-WebRequest -Uri $wingetDownload -OutFile "$wingetDir\winget.zip"
             Expand-Archive -Path "$wingetDir\winget.zip" -DestinationPath $wingetDir
         }
 
+
         #Install runasuser
         if (!(Get-Module RunAsUser)) {
+            Write-Output "Installing RunAsUser"
+            Install-PackageProvider -Name NuGet -Force | Out-Null
             Install-Module -Name RunAsUser -Force -SkipPublisherCheck
             Import-Module -Name RunAsUser -Force
         }
 
-        #Install vsruntime
-        $runtime = "https://aka.ms/vs/16/release/vc_redist.x64.exe"
-        Invoke-WebRequest -Uri $runtime -OutFile "$wingetDir\vs_redist.x64.exe"
-        $runArgs = "/q","/norestart"
-        $proc = Start-Process -FilePath "$wingetDir\vs_redist.x64.exe" -ArgumentList $runArgs -Wait
-        $proc
+        if (-Not(Test-Path 'HKLM:\SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes')) {
+            #Install vsruntime
+            Write-Output "Installing required VS Runtime"
+            $runtime = "https://aka.ms/vs/16/release/vc_redist.x64.exe"
+            Invoke-WebRequest -Uri $runtime -OutFile "$wingetDir\vs_redist.x64.exe"
+            $runArgs = "/q", "/norestart"
+            Start-Process -FilePath "$wingetDir\vs_redist.x64.exe" -ArgumentList $runArgs -Wait | Out-Null
+        }
+
+        Write-Output "Prereqs passed"
     }
 
     Process {
         Try {
             #TODO: update as system
-            $wingetArgs = "upgrade"
-            Start-Process -FilePath "$wingetDir\winget.exe" -ArgumentList $wingetArgs -Wait
+            $pi = New-Object System.Diagnostics.ProcessStartInfo
+            $pi.FileName = "$wingetDir\winget.exe"
+            $pi.RedirectStandardOutput = $true
+            $pi.UseShellExecute = $false
+            $pi.Arguments = "upgrade"
+
+            $p = New-Object System.Diagnostics.Process
+            $p.StartInfo = $pi
+            $p.Start() | Out-Null
+            $p.WaitForExit()
+            $p.StandardOutput.ReadToEnd()
 
             #TODO: update as user
         }

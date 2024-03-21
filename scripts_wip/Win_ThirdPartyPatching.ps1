@@ -63,7 +63,7 @@ function Win_ThirdPartyPatching {
             $pi.FileName = "$wingetDir\winget.exe"
             $pi.RedirectStandardOutput = $true
             $pi.UseShellExecute = $false
-            $pi.Arguments = "upgrade"
+            $pi.Arguments = "upgrade --accept-source-agreements --accept-package-agreements"
 
             $p = New-Object System.Diagnostics.Process
             $p.StartInfo = $pi
@@ -91,7 +91,7 @@ function Win_ThirdPartyPatching {
                     $pi.FileName = "C:\Program Files\winget\winget.exe"
                     $pi.RedirectStandardOutput = $true
                     $pi.UseShellExecute = $false
-                    $pi.Arguments = "upgrade"
+                    $pi.Arguments = "upgrade --accept-source-agreements --accept-package-agreements"
 
                     $p = New-Object System.Diagnostics.Process
                     $p.StartInfo = $pi

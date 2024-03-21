@@ -84,35 +84,40 @@ function Win_ThirdPartyPatching {
             }
 
             #TODO: update as user
-            Write-Output "Doing updates as user"
-            $userScript = {
-                $pi = New-Object System.Diagnostics.ProcessStartInfo
-                $pi.FileName = "C:\Program Files\winget\winget.exe"
-                $pi.RedirectStandardOutput = $true
-                $pi.UseShellExecute = $false
-                $pi.Arguments = "upgrade"
+            Write-Output "Checking updates as user"
+            $jobScript = {
+                $j = Start-Job -ScriptBlock {
+                    $pi = New-Object System.Diagnostics.ProcessStartInfo
+                    $pi.FileName = "C:\Program Files\winget\winget.exe"
+                    $pi.RedirectStandardOutput = $true
+                    $pi.UseShellExecute = $false
+                    $pi.Arguments = "upgrade"
 
-                $p = New-Object System.Diagnostics.Process
-                $p.StartInfo = $pi
-                $p.Start() | Out-Null
-                $p.WaitForExit()
-                $upgradeOutput = $p.StandardOutput.ReadToEnd()
-                if ($upgradeOutput -like "*NoInstalledPackageFound*") {
-                    Write-Output "No installed packages found for user updates"
-                }
-                else {
-                    Write-Output "Updates available, doing updates"
-                    $pi.Arguments = "upgrade --all --force"
+                    $p = New-Object System.Diagnostics.Process
                     $p.StartInfo = $pi
                     $p.Start() | Out-Null
                     $p.WaitForExit()
                     $upgradeOutput = $p.StandardOutput.ReadToEnd()
-                    Write-Output "Updates complete."
+                    if ($upgradeOutput -like "*NoInstalledPackageFound*") {
+                        Write-Output "No updates found for user updates"
+                    }
+                    else {
+                        Write-Output "Updates available, doing updates"
+                        $pi.Arguments = "upgrade --all --force"
+                        $p.StartInfo = $pi
+                        $p.Start() | Out-Null
+                        $p.WaitForExit()
+                        $upgradeOutput = $p.StandardOutput.ReadToEnd()
+                        Write-Output "Updates complete."
+                    }
                 }
+                
+                Wait-Job $j | Out-Null
+                Receive-Job -Job $j
             }
 
-            Invoke-AsCurrentUser -ScriptBlock $userScript -CaptureOutput
-            Write-Output "User updates complete"
+            Invoke-AsCurrentUser -ScriptBlock $jobScript -CaptureOutput
+            Write-Output "User update check complete"
         }
         Catch {
             Write-Error $_.Exception

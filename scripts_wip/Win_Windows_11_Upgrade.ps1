@@ -266,13 +266,19 @@ function Get-DriverBlocks {
         [xml]$scanResult = Get-Content $scanResultPath -ErrorAction Stop
         $blockedDrivers = $scanResult.CompatReport.DriverPackages.DriverPackage | Where-Object { $_.BlockMigration -eq 'True' }
 
-        foreach ($driver in $blockedDriverNodes) {
+        # check if $blockedDrivers is an object or an array
+        if ($blockedDrivers -is [System.Xml.XmlNode]) {
+            $blockedDrivers = @($blockedDrivers)
+        }
+
+        foreach ($driver in $blockedDrives) {
             $blockedDrivers += [PSCustomObject]@{
                 InfFile           = $driver.Inf
                 HasSignedBinaries = $driver.HasSignedBinaries
                 BlockReason       = "Migration block"
             }
         }
+
         Write-Log "Found $($blockedDrivers.Count) driver blocks." "WARNING"
     }
     catch {

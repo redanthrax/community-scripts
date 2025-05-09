@@ -325,7 +325,7 @@ function Start-Upgrade {
 
         Write-Log "Starting Windows 11 upgrade process..." "INFO"
         $dir = "$($env:SystemDrive)\_Windows_FU\packages"
-        $process = Start-Process -FilePath $Config.SetupPath -ArgumentList "/quietinstall /skipeula /auto upgrade /copylogs $dir /migratedrivers all" -PassThru -ErrorAction Stop
+        $process = Start-Process -FilePath $Config.SetupPath -ArgumentList "/quietinstall /skipeula /norestartui /skipselfupdate /auto upgrade /copylogs $dir" -PassThru -ErrorAction Stop
         $process.WaitForExit()
         Write-Log "Upgrade process completed with exit code: $($process.ExitCode)" "INFO"
         return $process.ExitCode -eq 0

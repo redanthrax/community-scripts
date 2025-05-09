@@ -14,8 +14,7 @@
 
 # Define parameters
 param(
-    [switch]$Force,
-    [switch]$WaitForCompletion
+    [switch]$Force
 )
 
 #---------------------------------
@@ -289,14 +288,6 @@ function Get-DriverBlocks {
 }
 
 function Start-Upgrade {
-    <#
-    .SYNOPSIS
-        Initiates the Windows 11 upgrade process.
-    #>
-    param (
-        [switch]$WaitForCompletion
-    )
-
     try {
         # Check for existing driver blocks
         Write-Log "Checking for driver compatibility issues before starting upgrade..." "INFO"
@@ -335,82 +326,14 @@ function Start-Upgrade {
         Write-Log "Starting Windows 11 upgrade process..." "INFO"
         $dir = "$($env:SystemDrive)\_Windows_FU\packages"
         $process = Start-Process -FilePath $Config.SetupPath -ArgumentList "/quietinstall /skipeula /auto upgrade /copylogs $dir /migratedrivers all" -PassThru -ErrorAction Stop
-
-        if ($WaitForCompletion) {
-            Write-Log "Monitoring upgrade process to completion..." "INFO"
-            $success = Monitor-UpgradeProcess -Process $process
-            return $success
-        }
-        else {
-            Write-Log "Upgrade process initiated. Use -WaitForCompletion to monitor progress." "INFO"
-            return $true
-        }
+        $process.WaitForExit()
+        Write-Log "Upgrade process completed with exit code: $($process.ExitCode)" "INFO"
+        return $process.ExitCode -eq 0
     }
     catch {
         Handle-Error -Message "Failed to initiate upgrade." -Exception $_
         return $false
     }
-}
-
-function Monitor-UpgradeProcess {
-    <#
-    .SYNOPSIS
-        Monitors the upgrade process and checks for compatibility issues.
-    #>
-    param (
-        [Parameter(Mandatory)]
-        [System.Diagnostics.Process]$Process
-    )
-
-    $timeout = (Get-Date).AddMinutes($Config.TimeoutMinutes)
-    $lastUpdate = Get-Date
-
-    Write-Progress -Activity "Monitoring Windows 11 Upgrade" -Status "Checking compatibility..."
-
-    while (-not $Process.HasExited -and (Get-Date) -lt $timeout) {
-        if ((Get-Date) -ge $lastUpdate.AddSeconds($Config.StatusIntervalSec)) {
-            Write-Log "Monitoring upgrade... (Elapsed: $((Get-Date) - $Process.StartTime).ToString('hh\:mm\:ss'))" "INFO"
-            $lastUpdate = Get-Date
-        }
-
-        Start-Sleep -Seconds 5
-    }
-
-    Write-Progress -Activity "Monitoring Windows 11 Upgrade" -Completed
-
-    if ($Process.HasExited) {
-        if ($Process.ExitCode -eq 0) {
-            # Verify OS version
-            $osInfo = Get-CimInstance Win32_OperatingSystem
-            $version = [Version]$osInfo.Version
-            $buildNumber = [int]$osInfo.BuildNumber
-            if ($version.Major -gt 10 -or ($version.Major -eq 10 -and $buildNumber -ge 22000)) {
-                Write-Log "Windows 11 detected. Upgrade completed successfully." "INFO"
-                return $true
-            }
-            else {
-                Write-Log "Upgrade process completed, but Windows 11 not detected. Checking logs for errors..." "ERROR"
-                $errorEntries = Get-UpgradeLogErrors
-                if ($errorEntries.Count -gt 0) {
-                    Show-UpgradeFailureInfo -ErrorEntries $errorEntries
-                }
-
-                return $false
-            }
-        }
-        else {
-            Write-Log "Upgrade process failed with exit code $($Process.ExitCode)." "ERROR"
-            $errorEntries = Get-UpgradeLogErrors
-            if ($errorEntries.Count -gt 0) {
-                Show-UpgradeFailureInfo -ErrorEntries $errorEntries
-            }
-
-            return $false
-        }
-    }
-
-    Write-Log "Upgrade monitoring timed out after $($Config.TimeoutMinutes) minutes." "ERROR"
-    return $false
 }
 
 function Check-PreviousUpgradeAttempt {
@@ -520,9 +443,11 @@ function Show-PreviousUpgradeAttemptInfo {
         if ($PreviousAttempt.BlockedDrivers.Count -gt 0) {
             Show-BlockedDriverInfo -BlockedDrivers $PreviousAttempt.BlockedDrivers
         }
+
         if ($PreviousAttempt.ErrorEntries.Count -gt 0) {
             Show-UpgradeFailureInfo -ErrorEntries $PreviousAttempt.ErrorEntries
         }
+
         Write-Log "Action: Address issues above. Use -Force to retry." "INFO"
     }
     else {
@@ -880,7 +805,26 @@ if ($previousAttempt.PreviousAttemptFound -and -not $Force) {
     if ($previousAttempt.FailureDetected) {
         Get-LastSetupError
         Write-Log "Previous upgrade failure detected. Use -Force to retry." "ERROR"
+        Write-Log "Attempting to download SetupDiag for further analysis..." "INFO"
+        $setupDiagUrl = "https://go.microsoft.com/fwlink/?linkid=870142"
+        $setupDiagPath = "$PSScriptRoot\\SetupDiag.exe"
+        Invoke-WebRequest -Uri $setupDiagUrl -OutFile $setupDiagPath
+        Write-Log "SetupDiag downloaded to $setupDiagPath, executing SetupDiag" "INFO"
+        Start-Process -FilePath $setupDiagPath -ArgumentList "/Output:$PSScriptRoot\\SetupDiagResults.log" -Wait
+        Get-Content "$PSScriptRoot\\SetupDiagResults.log"
         exit 1
+    }
+}
+elseif ($previousAttempt.PreviousAttemptFound -and $Force) {
+    Show-PreviousUpgradeAttemptInfo -PreviousAttempt $previousAttempt
+    if ($previousAttempt.FailureDetected) {
+        Write-Log "Force specified: Attempting auto remediation" "WARNING"
+        if ($previousAttempt.BlockedDrivers.Count -gt 0) {
+            $previousAttempt.BlockedDrivers | ForEach-Object {
+                Write-Log "Attempting to remove driver: $($_.Inf)" "INFO"
+                pnputil /delete-driver $_.Inf /force
+            }
+        }
     }
 }
 
@@ -892,7 +836,7 @@ if (-not ($compat.TPM -and $compat.SecureBoot -and $compat.System)) {
 }
 
 # Start upgrade
-$upgradeSuccess = Start-Upgrade -WaitForCompletion:$WaitForCompletion
+$upgradeSuccess = Start-Upgrade
 if (-not $upgradeSuccess) {
     Write-Log "Upgrade failed. Check logs for details." "ERROR"
     exit 1
